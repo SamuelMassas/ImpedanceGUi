@@ -1,0 +1,4 @@
+pyinstaller -w -p "C:\Users\ssilva50548\PythonProjects\GUI\venv\Lib\site-packages" main_v4.py 
+
+
+pyinstaller -w -p --hidden-import='impedance' main_v4.py 

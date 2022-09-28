@@ -4,7 +4,6 @@ from tkinter import ttk
 from tkinter import filedialog
 from tkinter import messagebox
 from typing import List, Any
-
 import pandas
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
@@ -483,15 +482,20 @@ def fit_(circuit, x, z):
     error: ndarray
         Error of the parameters
     """
+
     circuit.fit(x, z)
     y_fit = circuit.predict(x)
     parameters = circuit.parameters_
     error = circuit.conf_
 
+    #freqX = np.logspace(x[0], x[-1], 1000)
+    freqX = np.logspace(np.log10(x[0]), np.log10(x[-1]), 1000)
+    ZfitY = circuit.predict(freqX)
+
     print('----------------------------------------- Fiting -----------------------------------------')
     print(circuit)
 
-    return y_fit, parameters, error, circuit
+    return y_fit, parameters, error, circuit, freqX, ZfitY
 
 
 class NewTabGUI:
@@ -658,20 +662,22 @@ class NewTabGUI:
         Z = Re_Z + (-1j*Im_Z)
 
         # fitting
-        Z_fit, para, para_error, circuit = fit_(circuit=circuit, x=freq, z=Z)
-        Re_Z_fit = np.real(Z_fit)
-        Im_Z_fit = np.imag(Z_fit)
+        Z_fit, para, para_error, circuit, freqX, ZfitY = fit_(circuit=circuit, x=freq, z=Z)
+        Re_Z_fit = np.real(ZfitY)
+        Im_Z_fit = np.imag(ZfitY)
 
-        mod_z_fit = mod_(Z_fit)
+        mod_z_fit = mod_(Z_fit)  # For Chi square calculation
+        modZfitY = mod_(ZfitY)  # For plotting
 
         df = len(mod_z) - 1
+        pvalue = 1-0.01
         # TODO check chi square for non-linear fitting (Antonio's link)
         chi2 = np.sum((mod_z_fit - mod_z) ** 2 / mod_z_fit)
-        critical_chi2 = stats.chi2.ppf(1-0.05, df=df)
+        critical_chi2 = stats.chi2.ppf(pvalue, df=df)
 
         print(u'Chi-square Goodness of Fit test:\n'
               f'\tDegrees of Freedom: {df} \n'
-              '\tConfidence level: 95 %\n'
+              f'\tConfidence level: {round(pvalue*100,1)} %\n'
               u'\t\u03C7^2 = ' + str(chi2) +
               f'\n\tCritical ' + u'\u03C7^2 = ' + str(critical_chi2))
 
@@ -698,7 +704,7 @@ class NewTabGUI:
 
         # Plot fitting
         s_fitting = NewSeries(self.chart, style='-')
-        s_fitting.add_coordinates_nd(-Im_Z_fit, Re_Z_fit, freq, mod_z_fit)
+        s_fitting.add_coordinates_nd(-Im_Z_fit, Re_Z_fit, freqX, modZfitY)
 
         # Getting fitting lines properties to display in the right menu
         fitting_lines = self.chart.series_list[-1]
@@ -706,7 +712,7 @@ class NewTabGUI:
         idx = self.fit_idx  # Getting the current index for proper label of the fitting parameters
         self.my_fittings.add_command(label=f'Fitting {self.fit_idx}',
                                      command=lambda: FittingParams(circuit,
-                                                                   [chi2, critical_chi2, df],
+                                                                   [chi2, critical_chi2, df, round(pvalue*100, 1)],
                                                                    idx,
                                                                    name=self.e_name.get(),
                                                                    lines=fitting_lines[:2],
@@ -1022,7 +1028,7 @@ class FittingParams:
         self.my_tree.insert(parent=str(j), index=j+1, iid=j+1, text="", value=('DF', stats[2], ''))
         self.my_tree.insert(parent=str(j), index=j+2, iid=j+2, text="", value=(u'\u03A7\u00B2', stats[0], ''))
         self.my_tree.insert(parent=str(j), index=j+3, iid=j+3, text="", value=(u'Critical \u03A7\u00B2', stats[1], ''))
-        self.my_tree.insert(parent=str(j), index=j+4, iid=j+4, text="", value=('Confidence', 95, '%'))
+        self.my_tree.insert(parent=str(j), index=j+4, iid=j+4, text="", value=('Confidence', stats[3], '%'))
 
         Button(self.top, text='Copy', command=self.copy_this, bg='azure2').pack()
 
