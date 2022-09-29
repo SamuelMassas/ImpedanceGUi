@@ -297,6 +297,7 @@ class ImpedanceChart:
         toolbar = NavigationToolbar2Tk(self.canvas, self.master, pack_toolbar=False)
         toolbar.update()
         toolbar.pack(side=BOTTOM, fill=BOTH)
+        self.toolbar = toolbar
 
 
 class NewSeries:
@@ -527,6 +528,7 @@ class NewTabGUI:
         self.master.add(self.tab, text=self.label)
         self.server = server
         self.client = client
+        self.activeFit = None
 
         head_frame = Frame(self.tab, bg="white")
         head_frame.pack(side=TOP, fill=X)
@@ -716,13 +718,19 @@ class NewTabGUI:
         fitting_lines = self.chart.series_list[-1]
         color = fitting_lines[0].get_color()
         idx = self.fit_idx  # Getting the current index for proper label of the fitting parameters
+
+        thisFit = FittingParams(circuit,
+                                stats=[chi2, critical_chi2, df, round(pvalue * 100, 1)],
+                                predicted=[freqX, Re_Z_fit, -Im_Z_fit, modZfitY, phaseZfit],
+                                idx=idx,
+                                name=self.e_name.get(),
+                                lines=fitting_lines,
+                                chart=self.chart)
+
+        self.activeFit = thisFit  # updating activeFit
+
         self.my_fittings.add_command(label=f'Fitting {self.fit_idx}',
-                                     command=lambda: FittingParams(circuit,
-                                                                   [chi2, critical_chi2, df, round(pvalue * 100, 1)],
-                                                                   predicted=[freqX, Re_Z_fit, -Im_Z_fit, modZfitY, phaseZfit],
-                                                                   idx=idx,
-                                                                   name=self.e_name.get(), lines=fitting_lines,
-                                                                   chart=self.chart),
+                                     command=lambda: thisFit.display(self),
                                      foreground=color)
 
         self.fit_idx += 1
@@ -966,12 +974,38 @@ class FittingParams:
         if chart is not None:
             self.chart = chart
 
+        self.name = name
+        self.idx = idx
+        self.stats = stats
+        self.const = [list(circuit.constants.keys()), list(circuit.constants.values())]
+        self.names = circuit.get_param_names()
+        self.init_guess = circuit.initial_guess
+        self.params = circuit.parameters_
+        self.errors = circuit.conf_
+
+        # Predicted values from fitting
+        self.freq_p = predicted[0]
+        self.z_re_p = predicted[1]
+        self.z_im_p = predicted[2]
+        self.mod_z_p = predicted[3]
+        self.phase_p = predicted[4]
+
+        # Measured data
+        self.freq = self.chart.series_list[0][1].get_xdata()
+        self.z_re = self.chart.series_list[0][0].get_xdata()
+        self.z_im = self.chart.series_list[0][0].get_ydata()
+        self.mod_z = self.chart.series_list[0][1].get_ydata()
+        self.phase = self.chart.series_list[0][2].get_ydata()
+
+    def display(self, costume_tab):
+        costume_tab.activeFit = self  # setting this class as active fit in the costumetab
+        self.build_result_table()
+
+    def build_result_table(self):
         self.top = Tk()
         self.top.iconbitmap(r'group-30_116053.ico')
         # self.top.resizable(0, 0)
-        self.name = name
-        self.idx = idx
-        self.top.title(f'Parameters - Fitting {self.name}:::{idx}')
+        self.top.title(f'Parameters - Fitting {self.name}:::{self.idx}')
         # self.top.geometry('550x400')
         self.top.attributes('-topmost', 'true')
 
@@ -998,7 +1032,7 @@ class FittingParams:
         self.results_tree.column('error', width=120, minwidth=100)
         self.results_tree.column('units', width=100, minwidth=100)
 
-        self.results_tree.heading('#0', text=f"Fitting {idx}", anchor=W)
+        self.results_tree.heading('#0', text=f"Fitting {self.idx}", anchor=W)
         self.results_tree.heading('variable', text='Variable', anchor=W)
         self.results_tree.heading('value', text='Value', anchor=W)
         self.results_tree.heading('error', text='Error', anchor=W)
@@ -1013,58 +1047,53 @@ class FittingParams:
 
         self.results_tree.insert(parent='', index=0, iid=0, text="Constants")
 
-        const = [list(circuit.constants.keys()), list(circuit.constants.values())]
-        for i, name in enumerate(const[0]):
+        # const = [list(self.circuit.constants.keys()), list(self.circuit.constants.values())]
+        for i, name in enumerate(self.const[0]):
             self.results_tree.insert(parent='0',
                                      index=i + 1,
                                      iid=i + 1,
                                      text='',
-                                     values=(name, const[1][i], '', ''))
+                                     values=(name, self.const[1][i], '', ''))
 
-        j = const[0].__len__() + 1
+        j = self.const[0].__len__() + 1
         self.results_tree.insert(parent='', index=j, iid=j, text="Initial guess")
-        names = circuit.get_param_names()
-        init_guess = circuit.initial_guess
-        for i, name in enumerate(names[0]):
+        # names = self.circuit.get_param_names()
+        # init_guess = self.circuit.initial_guess
+        for i, name in enumerate(self.names[0]):
             self.results_tree.insert(parent=str(j),
                                      index=i+j+1,
                                      iid=i+j+1,
                                      text='',
-                                     values=(name, init_guess[i], '',names[1][i]))
+                                     values=(name, self.init_guess[i], '', self.names[1][i]))
 
-        j = j + names[0].__len__() + 1
+        j = j + self.names[0].__len__() + 1
         self.results_tree.insert(parent='', index=j, iid=j, text="Fitting")
         self.results_tree.item(j, open=True)  # Pre expanding the Fitting node
-        params = circuit.parameters_
-        errors = circuit.conf_
-        for i, name in enumerate(names[0]):
+        # params = self.circuit.parameters_
+        # errors = self.circuit.conf_
+        for i, name in enumerate(self.names[0]):
             self.results_tree.insert(parent=str(j),
                                      index=i+j+1,
                                      iid=i+j+1,
                                      text='',
-                                     values=(name, params[i], errors[i], names[1][i]))
+                                     values=(name, self.params[i], self.errors[i], self.names[1][i]))
 
-        j = j + names[0].__len__() + 1
+        j = j + self.names[0].__len__() + 1
         self.results_tree.insert(parent='', index=j, iid=j, text="Statistics")
         self.results_tree.item(j, open=True)  # Pre expanding the Fitting node
-        self.results_tree.insert(parent=str(j), index=j + 1, iid=j + 1, text="", value=('DF', stats[2], '', ''))
-        self.results_tree.insert(parent=str(j), index=j + 2, iid=j + 2, text="", value=(u'\u03A7\u00B2', stats[0], '', ''))
-        self.results_tree.insert(parent=str(j), index=j + 3, iid=j + 3, text="", value=(u'Critical \u03A7\u00B2', stats[1], '', ''))
-        self.results_tree.insert(parent=str(j), index=j + 4, iid=j + 4, text="", value=('Confidence', stats[3], '', '%'))
+        self.results_tree.insert(parent=str(j), index=j + 1, iid=j + 1, text="", value=('DF', self.stats[2], '', ''))
+        self.results_tree.insert(parent=str(j), index=j + 2, iid=j + 2, text="", value=(u'\u03A7\u00B2', self.stats[0], '', ''))
+        self.results_tree.insert(parent=str(j), index=j + 3, iid=j + 3, text="", value=(u'Critical \u03A7\u00B2', self.stats[1], '', ''))
+        self.results_tree.insert(parent=str(j), index=j + 4, iid=j + 4, text="", value=('Confidence', self.stats[3], '', '%'))
 
         Button(self.results_tab, text='Copy all results', command=lambda: self.copy_all(0), bg='azure2').pack()
 
-        self.build_predict_table(predicted)
+        self.build_predict_table()
         self.plot_again()
 
         self.top.mainloop()
 
-    def build_predict_table(self, data):
-        freq = data[0]
-        z_re = data[1]
-        z_im = data[2]
-        mod_z = data[3]
-        phase = data[4]
+    def build_predict_table(self):
 
         self.table_tree['columns'] = ('freq', 'z_re', 'z_im', 'mod_z', 'phase')
 
@@ -1092,12 +1121,12 @@ class FittingParams:
 
         self.table_tree.insert(parent='', index=0, iid=0, text='')
         self.table_tree.item(0, open=True)  # expanding first parent
-        for i in range(0, len(freq)):
+        for i in range(0, len(self.freq_p)):
             self.table_tree.insert(parent='0',
                                    index=i+1,
                                    iid=i+1,
                                    text='',
-                                   values=(freq[i], z_re[i], z_im[i], mod_z[i], phase[i]))
+                                   values=(self.freq_p[i], self.z_re_p[i], self.z_im_p[i], self.mod_z_p[i], self.phase_p[i]))
 
         Button(self.predict_tab, text='Copy predicted data', command=lambda: self.copy_all(1), bg='azure2').pack()
 
@@ -1131,11 +1160,11 @@ class FittingParams:
             self.top.clipboard_clear()
             self.top.clipboard_append(str)
         else:
-            str += f'Frequency (Hz)\tReal Z (\u03A9)\tImaginary Z (\u03A9)\t|Z| (\u03A9)\n'
+            str += f'Frequency (Hz)\tReal Z (\u03A9)\tImaginary Z (\u03A9)\t|Z| (\u03A9)\tPhase (\u0030)\n'
             for i in self.table_tree.get_children('0'):
                 item = self.table_tree.item(i)
                 values = list(item.values())[2]
-                str += f'{values[0]}\t{values[1]}\t{values[2]}\t{values[3]}\n'
+                str += f'{values[0]}\t{values[1]}\t{values[2]}\t{values[3]}\t{values[4]}\n'
             self.top.clipboard_clear()
             self.top.clipboard_append(str)
 

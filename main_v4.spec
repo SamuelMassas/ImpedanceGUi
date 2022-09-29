@@ -6,7 +6,7 @@ block_cipher = None
 
 a = Analysis(
     ['main_v4.py'],
-    pathex=['C:\\Users\\ssilva50548\\PythonProjects\\ImpedanceGui\\venv\\Lib\\site-packges'],
+    pathex=['C:\\Users\\ssilva50548\\PythonProjects\\ImpedanceGUi\\venv\\Lib\\site-packages'],
     binaries=[],
     datas=[],
     hiddenimports=[],

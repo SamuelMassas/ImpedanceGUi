@@ -9,6 +9,7 @@ from tkinter import messagebox
 from tkinter import ttk
 from PIL import Image, ImageTk
 from SC_interface import Server, Client
+import report_generator
 
 import numpy as np
 import pandas as pd
@@ -91,7 +92,10 @@ def load_csvdata(file):
             try:
                 pro_data[j, 4] = item[4]
             except IndexError:
-                pro_data[j, 4] = np.arctan(float(item[2])/float(item[1]))*180/np.pi
+                try:
+                    pro_data[j, 4] = np.arctan(float(item[2])/float(item[1]))*180/np.pi
+                except ZeroDivisionError:
+                    pro_data[j, 4] = None
             # freq, Zre, Zim, mod_z, arg_z
         except ValueError:
             pro_data = np.delete(pro_data, j, axis=0)
@@ -618,6 +622,10 @@ def stream_live(data):
             server.stream2client(iclient, json_string)
 
 
+def report_():
+    report_generator.generate_report(my_notebook.tabs_list)
+
+
 class CostumeNoteBook(ttk.Notebook):
     """
     Costume Notebook. Implemented methods to add and remove costume tabs and variables to track existent tabs
@@ -826,7 +834,10 @@ my_notebook = CostumeNoteBook(master=f_tabframe)
 my_notebook.pack(side=LEFT, anchor="n", fill=BOTH, expand=True)
 
 fit_editor = TTm3.FittingEditor(my_notebook)
-my_menu.add_command(label='Fitting Editor', command=lambda: fit_editor.open(root, my_menu))
+fitting_menu = Menu(my_menu, tearoff=0)
+fitting_menu.add_command(label='Fitting Editor', command=lambda: fit_editor.open(root, my_menu))
+fitting_menu.add_command(label='Generate report', command=report_)
+my_menu.add_cascade(label='Fitting', menu=fitting_menu)
 
 Active_tab = my_notebook.add_costume_tab(server=server, client=client)
 
