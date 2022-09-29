@@ -51,7 +51,8 @@ def load_xldata(filename):
     try:
         arg_z = array[:, 4]
     except IndexError:
-        arg_z = freq * 0
+        # Calculating phase anda converting to degrees
+        arg_z = np.arctan(z_im/z_re)*180/np.pi
 
     return z_im, z_re, freq, mod_z, arg_z
 
@@ -90,7 +91,7 @@ def load_csvdata(file):
             try:
                 pro_data[j, 4] = item[4]
             except IndexError:
-                pro_data[j, 4] = None
+                pro_data[j, 4] = np.arctan(float(item[2])/float(item[1]))*180/np.pi
             # freq, Zre, Zim, mod_z, arg_z
         except ValueError:
             pro_data = np.delete(pro_data, j, axis=0)
@@ -110,14 +111,58 @@ def load_csvdata(file):
     return z_im, z_re, freq, mod_z, arg_z
 
 
-def load_data(file=None):
+def load_csvdata_costum(file):
+    with open(file, 'r') as data:
+        data = data.read()
+
+        # Rearrange data
+    data = data.split('\n')
+    pro_data = np.zeros((len(data), 5))
+    idx_corr = 0
+    for i, item in enumerate(data):
+        item = item.split(',')
+        j = i - idx_corr
+        try:
+            pro_data[j, 0] = item[0]
+            pro_data[j, 1] = item[1]
+            pro_data[j, 2] = item[2]
+            try:
+                pro_data[j, 3] = item[3]
+            except IndexError:
+                pro_data[j, 3] = np.sqrt(float(item[1]) ** 2 + float(item[2]) ** 2)
+            try:
+                pro_data[j, 4] = item[4]
+            except IndexError:
+                pro_data[j, 4] = np.arctan(float(item[2]) / float(item[1])) * 180 / np.pi
+            # freq, Zre, Zim, mod_z, arg_z
+        except ValueError:
+            pro_data = np.delete(pro_data, j, axis=0)
+            idx_corr += 1
+            print(f'[SYSTEM] Deleted row {i} during data loading. Row content: {item}')
+            pass
+    # pro_data = np.delete(pro_data, 0, axis=0)  # remove headers
+    # pro_data = np.delete(pro_data, -1, axis=0)  # remove headers
+
+    # unpaking data
+    freq = pro_data[:, 0]
+    z_re = pro_data[:, 1]
+    z_im = abs(pro_data[:, 2])
+    mod_z = pro_data[:, 3]
+    arg_z = pro_data[:, 4]
+
+    return z_im, z_re, freq, mod_z, arg_z
+
+
+def load_data(file=None, special=False):
     if file is None:
         file = filedialog.askopenfilename()
 
-    if file.lower()[-3:] == 'csv':
+    if file.lower()[-3:] == 'csv' and not special:
         z_im, z_re, freq, mod_z, arg_z = load_csvdata(file)
-    elif file.lower()[-4:] == 'xlsx':
+    elif file.lower()[-4:] == 'xlsx' and not special:
         z_im, z_re, freq, mod_z, arg_z = load_xldata(file)
+    elif special:
+        z_im3, z_re3, freq3, mod_z3, arg_z3 = load_csvdata_costum(file)
     else:
         messagebox.showerror('File type not valid', 'It is not possible to read this file. Only .csv or .xlsx files can'
                                                     ' be used!')
@@ -685,6 +730,7 @@ my_settings.add_command(label="Connect Client", command=client_config, image=img
 my_settings.add_command(label='Configurations', command=prefs, image=imgprefs, compound='left')
 my_data = Menu(my_menu, tearoff=0)
 my_data.add_command(label="load data", command=load_data, image=imgload, compound='left')
+# my_data.add_command(label="Load costume data", command=lambda: load_data(special=True))
 my_menu.add_cascade(label="File", menu=my_file)
 my_menu.add_cascade(label="Settings", menu=my_settings)
 my_menu.add_cascade(label="Data", menu=my_data)

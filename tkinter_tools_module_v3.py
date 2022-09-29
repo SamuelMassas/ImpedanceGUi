@@ -316,7 +316,7 @@ class NewSeries:
                10: 'caretupbase', 11: 'caretdownbase', 'None': 'nothing', None: 'nothing', ' ': 'nothing',
                '': 'nothing'}
     """
-    def __init__(self, chart, style=None):
+    def __init__(self, chart, style=None, applyFit=False):
         self.chart = chart
         self.im_z = []
         self.re_z = []
@@ -364,9 +364,14 @@ class NewSeries:
         self.chart.series_counter += 1
 
         # Selects which yaxis to plot. To plot a secondary axis, this must be created first in TkinterChart.add_twin_()
-        self.line_ny = self.chart.axes_ny.plot([], [], self.style, markersize=3)[0]
-        self.line_bd = self.chart.axes_bd.plot([], [], self.style, markersize=3)[0]
-        self.line_bd2 = self.chart.axes_secondary.plot([], [], 'r.', markersize=3)[0]
+        if applyFit:
+            self.line_ny = self.chart.axes_ny.plot([], [], self.style, markersize=1, alpha=0.6)[0]
+            self.line_bd = self.chart.axes_bd.plot([], [], self.style, markersize=1, alpha=0.6)[0]
+            self.line_bd2 = self.chart.axes_secondary.plot([], [], self.style, markersize=1, alpha=0.6)[0]
+        else:
+            self.line_ny = self.chart.axes_ny.plot([], [], self.style, markersize=3)[0]
+            self.line_bd = self.chart.axes_bd.plot([], [], self.style, markersize=3)[0]
+            self.line_bd2 = self.chart.axes_secondary.plot([], [], 'r.', markersize=3)[0]
 
         self.chart.series_list.append([self.line_ny, self.line_bd, self.line_bd2])
 
@@ -423,8 +428,8 @@ class NewSeries:
         max_freq = max(self.freq)
         min_z = min(self.mod_z)
         max_z = max(self.mod_z)
-        # min_arg = min(self.arg_z)
-        # max_arg = max(self.arg_z)
+        min_arg = min(self.arg_z)
+        max_arg = max(self.arg_z)
 
         lw_bd_x, up_bd_x = self.chart.axes_bd.get_xlim()
         lw_bd_y, up_bd_y = self.chart.axes_bd.get_ylim()
@@ -435,8 +440,8 @@ class NewSeries:
             self.chart.axes_bd.set_xlim([min_freq*0.9, max_freq*1.1])
             self.chart.axes_bd.set_ylim([min_z * 0.9, max_z * 1.1])
 
-        # if lw_arg >= min_arg or max_arg >= up_arg:
-        #     self.chart.axes_secondary.set_ylim([min_arg * 0.9, max_arg * 1.1])
+        if lw_arg >= min_arg or max_arg >= up_arg:
+             self.chart.axes_secondary.set_ylim([min_arg * 0.9, max_arg * 1.1])
 
         # if not self.chart.axes_ny.get_xlim()[0] <= self.re_z[-1] <= self.chart.axes_ny.get_xlim()[1]:
         #     self.chart.axes_ny.set_xlim([min(self.re_z)*1.5, max(self.re_z)*1.5])
@@ -549,7 +554,7 @@ class NewTabGUI:
 
         b_tabel = Button(head_frame, bg='white', image=self.imgtab, command=lambda: self.show_table(b_tabel))
         b_tabel.pack(side=LEFT, fill=BOTH)
-        ToolTip(b_tabel, tip_text='Show table')
+        ToolTip(b_tabel, tip_text='Show table_tree')
 
         imgxl = Image.open('icon_excel_logo.jpg')
         imgxl = imgxl.resize((30, 25))
@@ -663,9 +668,10 @@ class NewTabGUI:
 
         # fitting
         Z_fit, para, para_error, circuit, freqX, ZfitY = fit_(circuit=circuit, x=freq, z=Z)
+
         Re_Z_fit = np.real(ZfitY)
         Im_Z_fit = np.imag(ZfitY)
-
+        phaseZfit = np.arctan(-Im_Z_fit/Re_Z_fit)*180/np.pi
         mod_z_fit = mod_(Z_fit)  # For Chi square calculation
         modZfitY = mod_(ZfitY)  # For plotting
 
@@ -703,8 +709,8 @@ class NewTabGUI:
             buffer.write(init_txt)
 
         # Plot fitting
-        s_fitting = NewSeries(self.chart, style='-')
-        s_fitting.add_coordinates_nd(-Im_Z_fit, Re_Z_fit, freqX, modZfitY)
+        s_fitting = NewSeries(self.chart, style='-', applyFit=True)
+        s_fitting.add_coordinates_nd(-Im_Z_fit, Re_Z_fit, freqX, modZfitY, phaseZfit)
 
         # Getting fitting lines properties to display in the right menu
         fitting_lines = self.chart.series_list[-1]
@@ -712,10 +718,10 @@ class NewTabGUI:
         idx = self.fit_idx  # Getting the current index for proper label of the fitting parameters
         self.my_fittings.add_command(label=f'Fitting {self.fit_idx}',
                                      command=lambda: FittingParams(circuit,
-                                                                   [chi2, critical_chi2, df, round(pvalue*100, 1)],
-                                                                   idx,
-                                                                   name=self.e_name.get(),
-                                                                   lines=fitting_lines[:2],
+                                                                   [chi2, critical_chi2, df, round(pvalue * 100, 1)],
+                                                                   predicted=[freqX, Re_Z_fit, -Im_Z_fit, modZfitY, phaseZfit],
+                                                                   idx=idx,
+                                                                   name=self.e_name.get(), lines=fitting_lines,
                                                                    chart=self.chart),
                                      foreground=color)
 
@@ -723,7 +729,7 @@ class NewTabGUI:
 
         if button is not None:
             button['state'] = NORMAL  # Button from Fitting Editor
-        return para, para_error, circuit.get_param_names(), [chi2, critical_chi2, df]
+        return para, para_error, circuit.get_param_names(), [chi2, critical_chi2, df, round(pvalue*100, 1)]
 
     def get_data(self):
         """
@@ -929,6 +935,7 @@ class NewTabGUI:
 
             lines[0].remove()
             lines[1].remove()
+            lines[2].remove()
 
         self.chart.canvas.draw()
 
@@ -953,7 +960,7 @@ class FittingParams:
     """
     Makes a class of the
     """
-    def __init__(self, circuit, stats, idx, name='', lines=None, chart=None):
+    def __init__(self, circuit, stats, predicted, idx, name='', lines=None, chart=None):
         if lines is not None:
             self.lines = lines
         if chart is not None:
@@ -962,79 +969,137 @@ class FittingParams:
         self.top = Tk()
         self.top.iconbitmap(r'group-30_116053.ico')
         # self.top.resizable(0, 0)
-        self.top.title(f'Parameters - Fitting {name}:::{idx}')
+        self.name = name
+        self.idx = idx
+        self.top.title(f'Parameters - Fitting {self.name}:::{idx}')
         # self.top.geometry('550x400')
         self.top.attributes('-topmost', 'true')
 
         my_canvas = Canvas(self.top, height=5, bg=self.lines[0].get_color())
         my_canvas.pack()
 
-        self.my_tree = ttk.Treeview(self.top)
-        self.my_tree['columns'] = ('variable', 'value', 'units')
+        self.my_notebook = ttk.Notebook(self.top)
+        self.my_notebook.pack(fill=BOTH, expand=True)
 
-        self.my_tree.column('#0', width=100, stretch=NO)
-        self.my_tree.column('variable', width=100, minwidth=35, stretch=NO)
-        self.my_tree.column('value', width=200, minwidth=100)
-        self.my_tree.column('units', width=100, minwidth=100)
+        self.results_tab = Frame(self.my_notebook)
+        self.predict_tab = Frame(self.my_notebook)
+        self.my_notebook.add(self.results_tab, text='Results Resume')
+        self.my_notebook.add(self.predict_tab, text='Predicted Data')
 
-        self.my_tree.heading('#0', text=f"Fitting {idx}", anchor=W)
-        self.my_tree.heading('variable', text='Variable', anchor=W)
-        self.my_tree.heading('value', text='Value', anchor=W)
-        self.my_tree.heading('units', text="Units", anchor=W)
+        # initializing both tree widgets
+        self.table_tree = ttk.Treeview(self.predict_tab)
+        self.results_tree = ttk.Treeview(self.results_tab)
 
-        my_yscrollbar = ttk.Scrollbar(self.top)
-        my_yscrollbar.configure(command=self.my_tree.yview)
-        self.my_tree.configure(yscrollcommand=my_yscrollbar.set)
+        self.results_tree['columns'] = ('variable', 'value', 'error', 'units')
+
+        self.results_tree.column('#0', width=100, stretch=NO)
+        self.results_tree.column('variable', width=50, minwidth=35, stretch=NO)
+        self.results_tree.column('value', width=120, minwidth=100)
+        self.results_tree.column('error', width=120, minwidth=100)
+        self.results_tree.column('units', width=100, minwidth=100)
+
+        self.results_tree.heading('#0', text=f"Fitting {idx}", anchor=W)
+        self.results_tree.heading('variable', text='Variable', anchor=W)
+        self.results_tree.heading('value', text='Value', anchor=W)
+        self.results_tree.heading('error', text='Error', anchor=W)
+        self.results_tree.heading('units', text="Units", anchor=W)
+
+        my_yscrollbar = ttk.Scrollbar(self.results_tab)
+        my_yscrollbar.configure(command=self.results_tree.yview)
+        self.results_tree.configure(yscrollcommand=my_yscrollbar.set)
         my_yscrollbar.pack(side=RIGHT, fill=Y)
 
-        self.my_tree.pack(fill=BOTH, expand=1)
+        self.results_tree.pack(fill=BOTH, expand=1)
 
-        self.my_tree.insert(parent='', index=0, iid=0, text="Constants")
+        self.results_tree.insert(parent='', index=0, iid=0, text="Constants")
 
         const = [list(circuit.constants.keys()), list(circuit.constants.values())]
         for i, name in enumerate(const[0]):
-            self.my_tree.insert(parent='0',
-                                index=i + 1,
-                                iid=i + 1,
-                                text='',
-                                values=(name, const[1][i], ''))
+            self.results_tree.insert(parent='0',
+                                     index=i + 1,
+                                     iid=i + 1,
+                                     text='',
+                                     values=(name, const[1][i], '', ''))
 
         j = const[0].__len__() + 1
-        self.my_tree.insert(parent='', index=j, iid=j, text="Initial guess")
+        self.results_tree.insert(parent='', index=j, iid=j, text="Initial guess")
         names = circuit.get_param_names()
         init_guess = circuit.initial_guess
         for i, name in enumerate(names[0]):
-            self.my_tree.insert(parent=str(j),
-                                index=i+j+1,
-                                iid=i+j+1,
-                                text='',
-                                values=(name, init_guess[i], names[1][i]))
+            self.results_tree.insert(parent=str(j),
+                                     index=i+j+1,
+                                     iid=i+j+1,
+                                     text='',
+                                     values=(name, init_guess[i], '',names[1][i]))
 
         j = j + names[0].__len__() + 1
-        self.my_tree.insert(parent='', index=j, iid=j, text="Fitting")
-        self.my_tree.item(j, open=True)  # Pre expanding the Fitting node
+        self.results_tree.insert(parent='', index=j, iid=j, text="Fitting")
+        self.results_tree.item(j, open=True)  # Pre expanding the Fitting node
         params = circuit.parameters_
         errors = circuit.conf_
         for i, name in enumerate(names[0]):
-            self.my_tree.insert(parent=str(j),
-                                index=i+j+1,
-                                iid=i+j+1,
-                                text='',
-                                values=(name, f'{params[i]} +- {errors[i]}', names[1][i]))
+            self.results_tree.insert(parent=str(j),
+                                     index=i+j+1,
+                                     iid=i+j+1,
+                                     text='',
+                                     values=(name, params[i], errors[i], names[1][i]))
 
         j = j + names[0].__len__() + 1
-        self.my_tree.insert(parent='', index=j, iid=j, text="Statistics")
-        self.my_tree.item(j, open=True)  # Pre expanding the Fitting node
-        self.my_tree.insert(parent=str(j), index=j+1, iid=j+1, text="", value=('DF', stats[2], ''))
-        self.my_tree.insert(parent=str(j), index=j+2, iid=j+2, text="", value=(u'\u03A7\u00B2', stats[0], ''))
-        self.my_tree.insert(parent=str(j), index=j+3, iid=j+3, text="", value=(u'Critical \u03A7\u00B2', stats[1], ''))
-        self.my_tree.insert(parent=str(j), index=j+4, iid=j+4, text="", value=('Confidence', stats[3], '%'))
+        self.results_tree.insert(parent='', index=j, iid=j, text="Statistics")
+        self.results_tree.item(j, open=True)  # Pre expanding the Fitting node
+        self.results_tree.insert(parent=str(j), index=j + 1, iid=j + 1, text="", value=('DF', stats[2], '', ''))
+        self.results_tree.insert(parent=str(j), index=j + 2, iid=j + 2, text="", value=(u'\u03A7\u00B2', stats[0], '', ''))
+        self.results_tree.insert(parent=str(j), index=j + 3, iid=j + 3, text="", value=(u'Critical \u03A7\u00B2', stats[1], '', ''))
+        self.results_tree.insert(parent=str(j), index=j + 4, iid=j + 4, text="", value=('Confidence', stats[3], '', '%'))
 
-        Button(self.top, text='Copy', command=self.copy_this, bg='azure2').pack()
+        Button(self.results_tab, text='Copy all results', command=lambda: self.copy_all(0), bg='azure2').pack()
 
+        self.build_predict_table(predicted)
         self.plot_again()
 
         self.top.mainloop()
+
+    def build_predict_table(self, data):
+        freq = data[0]
+        z_re = data[1]
+        z_im = data[2]
+        mod_z = data[3]
+        phase = data[4]
+
+        self.table_tree['columns'] = ('freq', 'z_re', 'z_im', 'mod_z', 'phase')
+
+        self.table_tree.column('freq', width=120, minwidth=100, stretch=NO)
+        self.table_tree.column('z_re', width=120, minwidth=100)
+        self.table_tree.column('z_im', width=120, minwidth=100)
+        self.table_tree.column('mod_z', width=120, minwidth=100)
+        self.table_tree.column('phase', width=120, minwidth=100)
+
+        self.table_tree.heading('#0', text=f"", anchor=W)
+        self.table_tree.heading('freq', text='Frequency (Hz)', anchor=W)
+        self.table_tree.heading('z_re', text='Real Z (\u03A9)', anchor=W)
+        self.table_tree.heading('z_im', text='-Imaginary Z (\u03A9)', anchor=W)
+        self.table_tree.heading('mod_z', text="|Z| (\u03A9)", anchor=W)
+        self.table_tree.heading('phase', text="Phase (\u00B0)", anchor=W)
+
+        self.table_tree['show'] = 'headings'
+
+        my_yscrollbar = ttk.Scrollbar(self.predict_tab)
+        my_yscrollbar.configure(command=self.table_tree.yview)
+        self.table_tree.configure(yscrollcommand=my_yscrollbar.set)
+        my_yscrollbar.pack(side=RIGHT, fill=Y)
+
+        self.table_tree.pack(fill=BOTH, expand=1)
+
+        self.table_tree.insert(parent='', index=0, iid=0, text='')
+        self.table_tree.item(0, open=True)  # expanding first parent
+        for i in range(0, len(freq)):
+            self.table_tree.insert(parent='0',
+                                   index=i+1,
+                                   iid=i+1,
+                                   text='',
+                                   values=(freq[i], z_re[i], z_im[i], mod_z[i], phase[i]))
+
+        Button(self.predict_tab, text='Copy predicted data', command=lambda: self.copy_all(1), bg='azure2').pack()
 
     def plot_again(self):
         """
@@ -1044,17 +1109,49 @@ class FittingParams:
         # TODO check duplicated lines. how to prevent and if need to prevent
         self.chart.axes_ny.add_line(self.lines[0])
         self.chart.axes_bd.add_line(self.lines[1])
+        self.chart.axes_secondary.add_line(self.lines[2])
 
         # Re adding lines to series list. To enable delete fittings with clear fittings
         self.chart.series_list.append(self.lines)
 
         self.chart.canvas.draw()
 
-    def copy_this(self):
-        id = int(self.my_tree.selection()[0])
-        value = list(self.my_tree.item(id).values())[2][1]
-        self.top.clipboard_clear()
-        self.top.clipboard_append(value)
+    def copy_all(self, value):
+        str = f'{self.name}\n\n'
+        if not value:
+            # Addinf respective headings
+            str += f'Fitting {self.idx}\tVariable\tValue\tError\tUnits\n'
+
+            for child in self.results_tree.get_children():
+                str += f'{self.results_tree.item(child)["text"]}\n'
+                for i in self.results_tree.get_children(child):
+                    item = self.results_tree.item(i)
+                    params = list(item.values())[2]
+                    str += f'\t{params[0]}\t{params[1]}\t{params[2]}\t{params[3]}\n'
+            self.top.clipboard_clear()
+            self.top.clipboard_append(str)
+        else:
+            str += f'Frequency (Hz)\tReal Z (\u03A9)\tImaginary Z (\u03A9)\t|Z| (\u03A9)\n'
+            for i in self.table_tree.get_children('0'):
+                item = self.table_tree.item(i)
+                values = list(item.values())[2]
+                str += f'{values[0]}\t{values[1]}\t{values[2]}\t{values[3]}\n'
+            self.top.clipboard_clear()
+            self.top.clipboard_append(str)
+
+
+def in_thread_fitting(fun):
+    """
+    Decorator function to run a callable in a thread
+    """
+
+    def wrapper(*args, **kwargs):
+        t1 = threading.Thread(target=fun, args=args, kwargs=kwargs)
+        t1.start()
+        t1.join(timeout=10)  # waits for teh fitting algorithm to finish in less than 10s
+        print(f'\n[SYSTEM] thread status (is alive?): {t1.is_alive()}')
+
+    return wrapper
 
 
 class FittingEditor:
@@ -1279,6 +1376,7 @@ class FittingEditor:
         self.get_from_buffer(**kwargs)
         self.build_entries(default=False)
 
+    @in_thread_fitting
     def call_apply_fit(self):
         """
         updates the state of buttons and self.values and calls the apply fit
@@ -1295,7 +1393,8 @@ class FittingEditor:
 
         self.b_fit['state'] = DISABLED
         try:
-            self.apply_fit()
+            params, error, elements, stats = self.apply_fit()
+            pass
         except ValueError or IndexError:
             # If user does not press OK
             self.build_entries()  # Update entries
