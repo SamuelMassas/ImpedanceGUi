@@ -1,11 +1,11 @@
-import json
-import numpy as np
-arr = np.array([1, 2, 3, 4, 5])
+import pandas as pd
 
-data = {'name': 'my name', 'data': np.ndarray.tolist(arr)}
-
-js_str = json.dumps(data)
-
-print(js_str)
-
-
+with pd.ExcelWriter('output.xlsx', engine="xlsxwriter") as writer:
+    workbook = writer.book
+    workbook.add_worksheet()
+    workbook.add_worksheet()
+    worksheet1 = workbook.sheetnames['Sheet1']
+    worksheet2 = workbook.sheetnames['Sheet2']
+    worksheet1.insert_image('A1', 'reportFig.png')
+    worksheet2.insert_image('A1', 'reportFig1.png')
+    pass

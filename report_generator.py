@@ -1,5 +1,4 @@
 import io
-
 import pandas as pd
 from tkinter import filedialog
 import xlsxwriter
@@ -14,11 +13,13 @@ def generate_report(costumeTabs):
     i = 0
     # output = []
     with pd.ExcelWriter(file, engine="xlsxwriter") as writer:
+        wrkb = writer.book
         for tab in costumeTabs:
             fitting = tab.activeFit
-            i += 1
-            tab.chart.figure.savefig('reportFig.png')
             if fitting is not None:
+                tab.chart.figure.savefig(f'ReportData/reportFig{i}.png', dpi=300)
+                wrks = wrkb.add_worksheet(fitting.name)
+
                 cons = {"Name": fitting.const[0], 'Value': fitting.const[1], 'Error': None, 'Units': None}
                 initGuess = {"Name": fitting.names[0], 'Value': fitting.init_guess, 'Error': None, 'Units': fitting.names[1]}
                 calFit = {'Name': fitting.names[0], 'Value': fitting.params, 'Error': fitting.errors, 'Units': fitting.names[1]}
@@ -50,8 +51,8 @@ def generate_report(costumeTabs):
                 df_main = [df_results, df_rawData]
                 startrow = 0
                 for df in df_main:
-                    df.to_excel(writer, engine="xlsxwriter", startrow=startrow, sheet_name=fitting.name)
+                    df.to_excel(writer, startrow=startrow, sheet_name=fitting.name)
                     startrow += (df.shape[0] + 2)
 
-                worksheet = writer.sheets[fitting.name]
-                worksheet.insert_image('H1', 'reportFig.png', {'x_scale': 0.5, 'y_scale': 0.5})
+                wrks.insert_image('H1', f'ReportData/reportFig{i}.png', {'x_scale': 0.5, 'y_scale': 0.5})
+                i += 1

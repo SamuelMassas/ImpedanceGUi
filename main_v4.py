@@ -115,58 +115,14 @@ def load_csvdata(file):
     return z_im, z_re, freq, mod_z, arg_z
 
 
-def load_csvdata_costum(file):
-    with open(file, 'r') as data:
-        data = data.read()
-
-        # Rearrange data
-    data = data.split('\n')
-    pro_data = np.zeros((len(data), 5))
-    idx_corr = 0
-    for i, item in enumerate(data):
-        item = item.split(',')
-        j = i - idx_corr
-        try:
-            pro_data[j, 0] = item[0]
-            pro_data[j, 1] = item[1]
-            pro_data[j, 2] = item[2]
-            try:
-                pro_data[j, 3] = item[3]
-            except IndexError:
-                pro_data[j, 3] = np.sqrt(float(item[1]) ** 2 + float(item[2]) ** 2)
-            try:
-                pro_data[j, 4] = item[4]
-            except IndexError:
-                pro_data[j, 4] = np.arctan(float(item[2]) / float(item[1])) * 180 / np.pi
-            # freq, Zre, Zim, mod_z, arg_z
-        except ValueError:
-            pro_data = np.delete(pro_data, j, axis=0)
-            idx_corr += 1
-            print(f'[SYSTEM] Deleted row {i} during data loading. Row content: {item}')
-            pass
-    # pro_data = np.delete(pro_data, 0, axis=0)  # remove headers
-    # pro_data = np.delete(pro_data, -1, axis=0)  # remove headers
-
-    # unpaking data
-    freq = pro_data[:, 0]
-    z_re = pro_data[:, 1]
-    z_im = abs(pro_data[:, 2])
-    mod_z = pro_data[:, 3]
-    arg_z = pro_data[:, 4]
-
-    return z_im, z_re, freq, mod_z, arg_z
-
-
-def load_data(file=None, special=False):
+def load_data(file=None):
     if file is None:
         file = filedialog.askopenfilename()
 
-    if file.lower()[-3:] == 'csv' and not special:
+    if file.lower()[-3:] == 'csv':
         z_im, z_re, freq, mod_z, arg_z = load_csvdata(file)
-    elif file.lower()[-4:] == 'xlsx' and not special:
+    elif file.lower()[-4:] == 'xlsx':
         z_im, z_re, freq, mod_z, arg_z = load_xldata(file)
-    elif special:
-        z_im3, z_re3, freq3, mod_z3, arg_z3 = load_csvdata_costum(file)
     else:
         messagebox.showerror('File type not valid', 'It is not possible to read this file. Only .csv or .xlsx files can'
                                                     ' be used!')
