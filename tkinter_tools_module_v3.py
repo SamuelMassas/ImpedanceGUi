@@ -119,10 +119,12 @@ class RightMouse:
     The menu can be bound to any widget, like: root, buttons, frames, labels.
     The widget that is bounded is called master
     """
-    def __init__(self, master, event='<Button-3>'):
+    def __init__(self, master, event='<Button-3>', event2=None):
         self.master = master
         self.menu = Menu(master, tearoff=False)
         master.bind(event, self.mouse_menu)
+        if event2 is not None:
+            master.bind(event2, self.mouse_menu)
 
     def mouse_menu(self, _event):
         # This function pops up the menu
@@ -582,7 +584,7 @@ class NewTabGUI:
         self.e_name.insert(0, label)
 
         # Getting the canvas that holds the FigureCanvasTkAgg
-        rmm = RightMouse(self.chart.canvas.get_tk_widget(), event='<Alt-Button-3>')
+        rmm = RightMouse(self.chart.canvas.get_tk_widget(), event='<Alt-ButtonRelease-3>', event2='<Alt-ButtonRelease-1>')
         self.my_fittings = Menu(rmm.menu, tearoff=0)
         rmm.menu.add_cascade(label='Fittings', menu=self.my_fittings)
         rmm.add_item('Clear fittings', self.clear_fittings)
@@ -673,9 +675,13 @@ class NewTabGUI:
 
         Re_Z_fit = np.real(ZfitY)
         Im_Z_fit = np.imag(ZfitY)
-        phaseZfit = np.arctan(-Im_Z_fit/Re_Z_fit)*180/np.pi
-        mod_z_fit = mod_(Z_fit)  # For Chi square calculation
         modZfitY = mod_(ZfitY)  # For plotting
+        phaseZfit = np.arctan(-Im_Z_fit/Re_Z_fit)*180/np.pi
+
+        # For statistics calculations
+        mod_z_fit = mod_(Z_fit)  # For Chi square calculation
+        reZfit = np.real(Z_fit)
+        imZfit = np.imag(Z_fit)
 
         df = len(mod_z) - 1
         pvalue = 1-0.01
@@ -719,13 +725,11 @@ class NewTabGUI:
         color = fitting_lines[0].get_color()
         idx = self.fit_idx  # Getting the current index for proper label of the fitting parameters
 
-        thisFit = FittingParams(circuit,
-                                stats=[chi2, critical_chi2, df, round(pvalue * 100, 1)],
-                                predicted=[freqX, Re_Z_fit, -Im_Z_fit, modZfitY, phaseZfit],
-                                idx=idx,
-                                name=self.e_name.get(),
-                                lines=fitting_lines,
-                                chart=self.chart)
+        thisFit = FittingParams(circuit, stats=[chi2, critical_chi2, df, round(pvalue * 100, 1)],
+                                initial_data=[freq, Re_Z, Im_Z, mod_z],
+                                predicted=[freqX, Re_Z_fit, -Im_Z_fit, modZfitY, phaseZfit], idx=idx,
+                                name=self.e_name.get(), lines=fitting_lines, chart=self.chart,
+                                predicted2=[reZfit, imZfit, mod_z_fit])
 
         self.activeFit = thisFit  # updating activeFit
 
@@ -968,7 +972,7 @@ class FittingParams:
     """
     Makes a class of the
     """
-    def __init__(self, circuit, stats, predicted, idx, name='', lines=None, chart=None):
+    def __init__(self, circuit, stats, initial_data, predicted, idx, name='', lines=None, chart=None, predicted2=None):
         if lines is not None:
             self.lines = lines
         if chart is not None:
@@ -983,6 +987,12 @@ class FittingParams:
         self.params = circuit.parameters_
         self.errors = circuit.conf_
 
+        # Initial data
+        self.freq = initial_data[0]
+        self.z_re = initial_data[1]
+        self.z_im = initial_data[2]
+        self.mod_z = initial_data[3]
+
         # Predicted values from fitting
         self.freq_p = predicted[0]
         self.z_re_p = predicted[1]
@@ -991,23 +1001,29 @@ class FittingParams:
         self.phase_p = predicted[4]
 
         # Measured data
-        self.freq = self.chart.series_list[0][1].get_xdata()
-        self.z_re = self.chart.series_list[0][0].get_xdata()
-        self.z_im = self.chart.series_list[0][0].get_ydata()
-        self.mod_z = self.chart.series_list[0][1].get_ydata()
-        self.phase = self.chart.series_list[0][2].get_ydata()
+        self.freq_m = self.chart.series_list[0][1].get_xdata()
+        self.z_re_m = self.chart.series_list[0][0].get_xdata()
+        self.z_im_m = self.chart.series_list[0][0].get_ydata()
+        self.mod_z_m = self.chart.series_list[0][1].get_ydata()
+        self.phase_m = self.chart.series_list[0][2].get_ydata()
+
+        self.extraStats = predicted2
+        if predicted2 is not None:
+            self.reZstat = predicted2[0]
+            self.imZstat = predicted2[1]
+            self.modZstat = predicted2[2]
 
     def display(self, costume_tab):
         costume_tab.activeFit = self  # setting this class as active fit in the costumetab
         self.build_result_table()
 
     def build_result_table(self):
-        self.top = Tk()
+        self.top = Toplevel()
         self.top.iconbitmap(r'group-30_116053.ico')
         # self.top.resizable(0, 0)
         self.top.title(f'Parameters - Fitting {self.name}:::{self.idx}')
         # self.top.geometry('550x400')
-        self.top.attributes('-topmost', 'true')
+        # self.top.attributes('-topmost', 'true')
 
         my_canvas = Canvas(self.top, height=5, bg=self.lines[0].get_color())
         my_canvas.pack()
@@ -1086,7 +1102,8 @@ class FittingParams:
         self.results_tree.insert(parent=str(j), index=j + 3, iid=j + 3, text="", value=(u'Critical \u03A7\u00B2', self.stats[1], '', ''))
         self.results_tree.insert(parent=str(j), index=j + 4, iid=j + 4, text="", value=('Confidence', self.stats[3], '', '%'))
 
-        Button(self.results_tab, text='Copy all results', command=lambda: self.copy_all(0), bg='azure2').pack()
+        Button(self.results_tab, text='Copy all results', command=lambda: self.copy_all(0), bg='azure2').pack(side=LEFT, fill=BOTH, expand=1)
+        Button(self.results_tab, text='Visualize statistics', command=self.show_stats, bg='azure2').pack(side=RIGHT, fill=BOTH, expand=1)
 
         self.build_predict_table()
         self.plot_again()
@@ -1129,6 +1146,41 @@ class FittingParams:
                                    values=(self.freq_p[i], self.z_re_p[i], self.z_im_p[i], self.mod_z_p[i], self.phase_p[i]))
 
         Button(self.predict_tab, text='Copy predicted data', command=lambda: self.copy_all(1), bg='azure2').pack()
+
+    def show_stats(self):
+        if self.extraStats is not None:
+            from matplotlib.pyplot import subplots, show, title
+            # Residual of mod(Z)
+            res = self.mod_z - self.modZstat
+            mu_res = np.mean(res)
+            sd_res = np.std(res)
+
+            fig, ax1 = subplots()
+            title(f'Residuals \u03BC={round(float(mu_res), 3)}, \u03C3={round(float(sd_res), 3)}')
+
+            ax1.set_xscale('log')
+            ax1.set_yscale('log')
+            ax2 = ax1.twinx()
+            ax2.set_ylim([-5 * sd_res, 5 * sd_res])
+            ax1.plot(self.freq_m, self.mod_z_m, '.', color=self.lines[0].get_color())  # ploting measured data
+            ax1.plot(self.freq_p, self.mod_z_p, '-', color=self.lines[0].get_color(), alpha=0.4)  # plotting fitting
+            ax2.plot(self.freq, res, 'k.-', alpha=0.4, linewidth=1)  # plotting residuals
+            ax1.set_xlabel('Frequency/ Hz')
+            ax1.set_ylabel(u'Z/\u2126')
+            ax2.set_ylabel(u'Residuals')
+            fig.tight_layout()
+
+            # Adding figure to a top level
+            top = Toplevel()
+            top.iconbitmap(r'group-30_116053.ico')
+            top.title(f'Parameters - Fitting {self.name}:::{self.idx}')
+            # top.attributes('-topmost', 'true')
+            canvas = FigureCanvasTkAgg(fig, top)
+            canvas.get_tk_widget().pack(side=TOP, fill=BOTH, expand=True)
+            canvas.draw()
+            toolbar = NavigationToolbar2Tk(canvas, top, pack_toolbar=False)
+            toolbar.update()
+            toolbar.pack(side=BOTTOM, fill=BOTH)
 
     def plot_again(self):
         """
@@ -1173,11 +1225,10 @@ def in_thread_fitting(fun):
     """
     Decorator function to run a callable in a thread
     """
-
     def wrapper(*args, **kwargs):
         t1 = threading.Thread(target=fun, args=args, kwargs=kwargs)
         t1.start()
-        t1.join(timeout=10)  # waits for teh fitting algorithm to finish in less than 10s
+        t1.join(timeout=20)  # waits for the fitting algorithm to finish in less than 20s max
         print(f'\n[SYSTEM] thread status (is alive?): {t1.is_alive()}')
 
     return wrapper
@@ -1187,6 +1238,7 @@ class FittingEditor:
     def __init__(self, cnb):
         self.cnb = cnb  # fitting function from the specific chart
         self.b_fit = None
+        self.b_fitAll = None
         self.checks = []
         self.parameters = []
 
@@ -1228,8 +1280,8 @@ class FittingEditor:
         circ_frame.pack(fill=BOTH, expand=1)
         inner_frame = Frame(circ_frame)
         inner_frame.pack()
-        btn_last = Button(inner_frame, text='Last initial guess', bg='pale green', command=self.build_from_buffer)
-        btn_last.pack(side=LEFT, fill=X)
+        # btn_last = Button(inner_frame, text='Last initial guess', bg='pale green', command=self.build_from_buffer)
+        # btn_last.pack(side=LEFT, fill=X)
         btn_last = Button(inner_frame, text='Last calculated fit', bg='bisque2',
                           command=lambda: self.build_from_buffer(initial=False))
         btn_last.pack(side=LEFT, fill=X)
@@ -1370,8 +1422,11 @@ class FittingEditor:
                     self.checks.append(var)
                     Checkbutton(para_frame3, onvalue=1, offvalue=0, variable=var).pack()
 
-        # b_fit = Button(para_frame, text='Apply Fitting', command=apply_fit, bg='azure2')
-        self.b_fit = Button(para_frame, text='Apply Fitting',
+        self.b_fitAll = Button(para_frame, text='Calculate All',
+                               command=lambda: threading.Thread(target=self.call_apply_fit, args=(True,)).start(), bg='azure2')
+        self.b_fitAll.pack(fill=BOTH, expand=1, side=BOTTOM)
+
+        self.b_fit = Button(para_frame, text='Calculate',
                             command=lambda: threading.Thread(target=self.call_apply_fit).start(), bg='azure2')
         self.b_fit.pack(fill=BOTH, expand=1, side=BOTTOM)
 
@@ -1406,7 +1461,7 @@ class FittingEditor:
         self.build_entries(default=False)
 
     @in_thread_fitting
-    def call_apply_fit(self):
+    def call_apply_fit(self, all=False):
         """
         updates the state of buttons and self.values and calls the apply fit
         """
@@ -1421,13 +1476,17 @@ class FittingEditor:
         self.up_bound = int(self.up_e.get())
 
         self.b_fit['state'] = DISABLED
+        self.b_fitAll['state'] = DISABLED
         try:
-            params, error, elements, stats = self.apply_fit()
-            pass
+            if not all:
+                self.apply_fit()
+            elif all:
+                self.apply_fit2all()
         except ValueError or IndexError:
             # If user does not press OK
             self.build_entries()  # Update entries
         self.b_fit['state'] = NORMAL
+        self.b_fitAll['state'] = NORMAL
 
     def apply_fit(self):
         """
@@ -1452,10 +1511,21 @@ class FittingEditor:
         window = [self.lw_bound, self.up_bound]
 
         # Fitting function
-        if len(cons) == 0:
-            params, error, elements, stats = func(circuit=circuit, initial_guess=initial_guess, cons=None, window=window)
-        else:
-            params, error, elements, stats = func(circuit=circuit, initial_guess=initial_guess, cons=cons, window=window)
+        try:
+            if len(cons) == 0:
+                params, error, elements, stats = func(circuit=circuit, initial_guess=initial_guess, cons=None, window=window)
+            else:
+                params, error, elements, stats = func(circuit=circuit, initial_guess=initial_guess, cons=cons, window=window)
 
-        return params, error, elements, stats
+            return params, error, elements, stats
+        except IndexError:
+            pass
 
+    def apply_fit2all(self):
+        response = messagebox.askquestion('Calculate', 'You are about to calculate the fitting for all the current data.\n '
+                                                       'Are you sure you want to continue?')
+        if response == 'yes':
+            print(f'[response] {response}')
+            for id in range(len(self.cnb.tabs_list)):
+                self.cnb.select(id)
+                self.apply_fit()
