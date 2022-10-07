@@ -35,25 +35,35 @@ def load_xldata(filename):
     df = pd.read_excel(io=filename)
 
     # Getting only values as numpy array
-    array = df.values
-    if not isinstance(array[0, 0], int) or not isinstance(array[0, 0], float):
-        array = np.delete(array, 0, axis=0)
+    raw_array = df.values
+    proc_array = raw_array  # Array that will store the processed raw data
+    corr = 0   # Correction factor for indices
+    for idx, row in enumerate(raw_array):
+        # Removing strings from array
+        if not isinstance(row[0], int) and not isinstance(row[0], float):
+            proc_array = np.delete(proc_array, idx-corr, axis=0)
+            corr += 1
 
-    array = array.astype(float)
-    freq = array[:, 0]
-    z_re = array[:, 1]
-    z_im = abs(array[:, 2])
+    proc_array = proc_array.astype(float)
+    freq = proc_array[:, 0]
+    z_re = proc_array[:, 1]
+    z_im = abs(proc_array[:, 2])
 
     try:
-        mod_z = array[:, 3]
+        mod_z = proc_array[:, 3]
     except IndexError:
         mod_z = np.sqrt(z_re ** 2 + z_im ** 2)
     try:
-        arg_z = array[:, 4]
+        arg_z = proc_array[:, 4]
     except IndexError:
         # Calculating phase anda converting to degrees
         arg_z = np.arctan(z_im/z_re)*180/np.pi
 
+    z_im = z_im[~np.isnan(z_im)]
+    z_re = z_re[~np.isnan(z_re)]
+    freq = freq[~np.isnan(freq)]
+    mod_z = mod_z[~np.isnan(mod_z)]
+    arg_z = arg_z[~np.isnan(arg_z)]
     return z_im, z_re, freq, mod_z, arg_z
 
 
@@ -114,8 +124,50 @@ def load_csvdata(file):
     return z_im, z_re, freq, mod_z, arg_z
 
 
+def check_data(z_ims, z_res, freqs, mod_zs, arg_zs):
+    """
+    Checking for multiple data sets and splitting them
+    """
+    z_imL = []
+    z_reL = []
+    freqL = []
+    mod_zL = []
+    arg_zL = []
+
+    multiData = False
+    # Checking how many times the initial frequency appears on the data vector
+    # idxs = np.where(freqs == 100000)[0]
+    idxs = np.where(freqs == np.max(freqs))[0]
+    if np.size(idxs) > 1:
+        for i, idx in enumerate(idxs):
+            try:
+                freqL.append(freqs[idx:idxs[i + 1] + 1])
+                z_reL.append(z_res[idx:idxs[i + 1] + 1])
+                z_imL.append(z_ims[idx:idxs[i + 1] + 1])
+                mod_zL.append(mod_zs[idx:idxs[i + 1] + 1])
+                arg_zL.append(arg_zs[idx:idxs[i + 1] + 1])
+            except IndexError:
+                # when idx is the last element in the array
+                freqL.append(freqs[idx:])
+                z_reL.append(z_res[idx:])
+                z_imL.append(z_ims[idx:])
+                mod_zL.append(mod_zs[idx:])
+                arg_zL.append(arg_zs[idx:])
+        multiData = True
+    else:
+        # Only one set exists in the data vectores
+        z_imL.append(z_ims)
+        z_reL.append(z_res)
+        freqL.append(freqs)
+        mod_zL.append(mod_zs)
+        arg_zL.append(arg_zs)
+
+    return z_imL, z_reL, freqL, mod_zL, arg_zL, multiData
+
+
 @in_thread
 def loader(files, tpb):
+    multiData = False
     for file in files:
         valid = True
         try:
@@ -128,30 +180,45 @@ def loader(files, tpb):
                 # messagebox.showerror('File type not valid',
                 #                      'It is not possible to read this file. Only .csv or .xlsx files can'
                 #                      ' be used!')
-            tpb.progress()
 
             if valid:
+                # checking for joined data sets
+                z_imL, z_reL, freqL, mod_zL, arg_zL, multiData = check_data(z_im, z_re, freq, mod_z, arg_z)
                 # creating new tab to plot data
-                global Active_tab
-                # Active_tab = TTm3.NewTabGUI(my_notebook, label=file.split('/')[-1])
-                Active_tab = my_notebook.add_costume_tab(server=server, label=file.split('/')[-1])
+                for i, freq in enumerate(freqL):
+                    z_im = z_imL[i]
+                    z_re = z_reL[i]
+                    mod_z = mod_zL[i]
+                    arg_z = arg_zL[i]
 
-                # Extracting graph (axes) from tab
-                active_chart = Active_tab.chart
+                    global Active_tab
+                    # Active_tab = TTm3.NewTabGUI(my_notebook, label=file.split('/')[-1])
+                    if multiData:
+                        Active_tab = my_notebook.add_costume_tab(server=server, label=file.split('/')[-1] + f'_Set{i}')
+                    else:
+                        Active_tab = my_notebook.add_costume_tab(server=server, label=file.split('/')[-1])
+                    # Extracting graph (axes) from tab
+                    active_chart = Active_tab.chart
 
-                # Creating series in graphs (axes)
-                impedance_serie = TTm3.NewSeries(active_chart)
+                    # Creating series in graphs (axes)
+                    impedance_serie = TTm3.NewSeries(active_chart)
 
-                impedance_serie.add_coordinates_nd(z_im, z_re, freq, mod_z, arg_z)
-                my_notebook.select(len(my_notebook.tabs()) - 1)  # selecting added tab
+                    impedance_serie.add_coordinates_nd(z_im, z_re, freq, mod_z, arg_z)
+                    my_notebook.select(len(my_notebook.tabs()) - 1)  # selecting added tab
+
+            tpb.progress()
         except (UnboundLocalError, ValueError):
             pass
 
     tpb.complete()
     tpb.close()
+    if multiData:
+        messagebox.showwarning('Multiple measures per file!', 'One or more files contain multiple sets of data '
+                                                              'measures. '
+                                                              'The data measures where split during loading!')
 
 
-def load_data(files=None):
+def load_data(event=None, files=None):
     if files is None:
         files = filedialog.askopenfilenames()
         pass
@@ -601,7 +668,7 @@ def stream_live(data):
             server.stream2client(iclient, json_string)
 
 
-def report_():
+def report_(event=None):
     """ Calling function to generate report"""
     report_generator.call_with_popup(my_notebook.tabs_list)
 
@@ -659,6 +726,10 @@ class Panel(Frame):
                              command=lambda: threading.Thread(target=stop_coms).start())
         self.b_stop.pack(padx=5)
         self.b_stop['state'] = DISABLED
+
+
+def open_fitEditor(event=None):
+    fit_editor.open(root, my_menu)
 
 
 root = Tk()
@@ -815,10 +886,15 @@ my_notebook.pack(side=LEFT, anchor="n", fill=BOTH, expand=True)
 
 fit_editor = TTm3.FittingEditor(my_notebook)
 fitting_menu = Menu(my_menu, tearoff=0)
-fitting_menu.add_command(label='Fitting Editor', command=lambda: fit_editor.open(root, my_menu))
+fitting_menu.add_command(label='Fitting Editor', command=open_fitEditor)
 fitting_menu.add_command(label='Generate report', command=report_)
 my_menu.add_cascade(label='Fitting', menu=fitting_menu)
 
 Active_tab = my_notebook.add_costume_tab(server=server, client=client)
+
+#Creating hotkeys
+root.bind('<Control-l>', load_data)
+root.bind('<Control-f>', open_fitEditor)
+root.bind('<Control-g>', report_)
 
 root.mainloop()

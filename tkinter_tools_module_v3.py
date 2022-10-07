@@ -512,7 +512,7 @@ class NewTabGUI:
 
     """
 
-    def __init__(self, master, server=None, client=None, label='New tab'):
+    def __init__(self, master, server=None, client=None, label='Overview'):
         """
         Adds a new tab in notebook
 
@@ -527,7 +527,7 @@ class NewTabGUI:
         self.label = label
         self.fit_idx = 1
         self.tab = Frame(self.master, bd=0)
-        self.master.add(self.tab, text=self.label)
+        self.master.add(self.tab, text=self.label.split('.')[0])
         self.server = server
         self.client = client
         self.activeFit = None
@@ -584,7 +584,7 @@ class NewTabGUI:
         self.e_name.insert(0, label)
 
         # Getting the canvas that holds the FigureCanvasTkAgg
-        rmm = RightMouse(self.chart.canvas.get_tk_widget(), event='<Alt-ButtonRelease-3>', event2='<Alt-ButtonRelease-1>')
+        rmm = RightMouse(self.chart.canvas.get_tk_widget(), event='<Control-r>', event2='<Alt-ButtonRelease-1>')
         self.my_fittings = Menu(rmm.menu, tearoff=0)
         rmm.menu.add_cascade(label='Fittings', menu=self.my_fittings)
         rmm.add_item('Clear fittings', self.clear_fittings)
@@ -1254,51 +1254,56 @@ class FittingEditor:
         self.up_e = None
         self.circuit_entry = None
 
+        self.is_open = False
+
     def open(self, root, menu):
         def good_bye_editor():
             menu.entryconfigure(4, state=NORMAL)
             self.top.destroy()
+            self.is_open = False
 
-        menu.entryconfigure(4, state=DISABLED)
-        self.top = Toplevel()
-        self.top.resizable(0, 0)
-        # self.top.attributes('-topmost', 'true')
-        self.top.transient(root)
-        self.top.title('Fitting Editor')
-        self.top.protocol("WM_DELETE_WINDOW", good_bye_editor)
+        if not self.is_open:
+            self.is_open = True
+            menu.entryconfigure(4, state=DISABLED)
+            self.top = Toplevel()
+            self.top.resizable(0, 0)
+            # self.top.attributes('-topmost', 'true')
+            self.top.transient(root)
+            self.top.title('Fitting Editor')
+            self.top.protocol("WM_DELETE_WINDOW", good_bye_editor)
 
-        bound_frame = LabelFrame(self.top, text='Data Window (indexes)')
-        self.lw_e = Entry(bound_frame)
-        self.lw_e.pack(side=LEFT)
-        self.lw_e.insert(0, str(self.lw_bound))
-        self.up_e = Entry(bound_frame)
-        self.up_e.pack(side=LEFT)
-        self.up_e.insert(0, str(self.up_bound))
-        bound_frame.pack(pady=10)
+            bound_frame = LabelFrame(self.top, text='Data Window (indexes)')
+            self.lw_e = Entry(bound_frame)
+            self.lw_e.pack(side=LEFT)
+            self.lw_e.insert(0, str(self.lw_bound))
+            self.up_e = Entry(bound_frame)
+            self.up_e.pack(side=LEFT)
+            self.up_e.insert(0, str(self.up_bound))
+            bound_frame.pack(pady=10)
 
-        circ_frame = LabelFrame(self.top, text='Equivalent Circuit')
-        circ_frame.pack(fill=BOTH, expand=1)
-        inner_frame = Frame(circ_frame)
-        inner_frame.pack()
-        # btn_last = Button(inner_frame, text='Last initial guess', bg='pale green', command=self.build_from_buffer)
-        # btn_last.pack(side=LEFT, fill=X)
-        btn_last = Button(inner_frame, text='Last calculated fit', bg='bisque2',
-                          command=lambda: self.build_from_buffer(initial=False))
-        btn_last.pack(side=LEFT, fill=X)
+            circ_frame = LabelFrame(self.top, text='Equivalent Circuit')
+            circ_frame.pack(fill=BOTH, expand=1)
+            inner_frame = Frame(circ_frame)
+            inner_frame.pack()
+            # btn_last = Button(inner_frame, text='Last initial guess', bg='pale green', command=self.build_from_buffer)
+            # btn_last.pack(side=LEFT, fill=X)
+            btn_last = Button(inner_frame, text='Last calculated fit', bg='bisque2',
+                              command=lambda: self.build_from_buffer(initial=False))
+            btn_last.pack(side=LEFT, fill=X)
 
-        self.circuit_entry = Entry(circ_frame, width=30)
-        self.circuit_entry.pack(side=LEFT, fill=BOTH, expand=1, padx=2)
-        # circuit_entry.bind('<Any-KeyRelease>', build_entries)
-        self.circuit_entry.insert(0, self.eq_circ)
+            self.circuit_entry = Entry(circ_frame, width=30)
+            self.circuit_entry.pack(side=LEFT, fill=BOTH, expand=1, padx=2)
+            # circuit_entry.bind('<Any-KeyRelease>', build_entries)
+            self.circuit_entry.insert(0, self.eq_circ)
 
-        btn = Button(inner_frame, text='Use Default', command=self.build_entries, bg='azure2')
-        btn.pack(side=LEFT, fill=X)
+            btn = Button(inner_frame, text='Use Default', command=self.build_entries, bg='azure2')
+            btn.pack(side=LEFT, fill=X)
 
-        para_frame = LabelFrame(self.top, text='Parameters')
+            para_frame = LabelFrame(self.top, text='Parameters')
 
-        self.build_entries(default=True)
+            self.build_entries(default=True)
 
-        self.top.mainloop()
+            self.top.mainloop()
 
     def build_entries(self, e=None, default=True):
         """
@@ -1429,6 +1434,7 @@ class FittingEditor:
         self.b_fit = Button(para_frame, text='Calculate',
                             command=lambda: threading.Thread(target=self.call_apply_fit).start(), bg='azure2')
         self.b_fit.pack(fill=BOTH, expand=1, side=BOTTOM)
+
 
     @staticmethod
     def get_buffer(file_name):

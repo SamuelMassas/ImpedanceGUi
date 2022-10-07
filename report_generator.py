@@ -52,7 +52,7 @@ def generate_report(file, Tabs, tpb=None):
                 if fitting is not None:
                     tab.chart.figure.savefig(f'ReportData/reportFig{i}.png', dpi=300)
 
-                    sht_name = fitting.name
+                    sht_name = tab.e_name.get()
                     if len(sht_name) > 31:
                         sht_name += ' '
                         sht_name = sht_name[-30:-1]

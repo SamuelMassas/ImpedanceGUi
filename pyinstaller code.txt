@@ -1,1 +1,1 @@
-pyinstaller -w -p "C:\Users\ssilva50548\PythonProjects\ImpedanceGUi\venv\Lib\site-packages" EISaFit.py 
+pyinstaller -w -p "C:\Users\ssilva50548\PythonProjects\ImpedanceGUi\venv\Lib\site-packages" -i group-30_116053.ico --onefile EISaF1t.py 
